@@ -12,16 +12,16 @@ function Model() {
 
   useEffect(() => {
     scene.traverse((child) => {
-      console.log(child.name, child.type)
+      // console.log(child.name, child.type)
       if (child.name.includes('circle') || child.name.includes('Circle') || child.name.includes('balls') || child.name.includes('Balls')) {
         circleRef.current = child
       }
     })
     
     // Debug: Log available animations
-    console.log('Available animations:', animations)
-    console.log('Animation names:', names)
-    console.log('Actions:', actions)
+    // console.log('Available animations:', animations)
+    // console.log('Animation names:', names)
+    // console.log('Actions:', actions)
   }, [scene, animations, names, actions])
 
   // Update animation mixer each frame
@@ -34,10 +34,10 @@ function Model() {
   // Play animation on click
   const handleClick = (event) => {
     event.stopPropagation()
-    console.log('Click detected!')
-    console.log('Animations:', animations)
-    console.log('Actions:', actions)
-    console.log('Names:', names)
+    // console.log('Click detected!')
+    // console.log('Animations:', animations)
+    // console.log('Actions:', actions)
+    // console.log('Names:', names)
     
     if (animations && animations.length > 0 && mixer) {
       // Stop all currently playing animations
@@ -50,7 +50,7 @@ function Model() {
       // Try to play by name first
       if (names && names.length > 0) {
         const actionName = names[0]
-        console.log('Playing animation:', actionName)
+        // console.log('Playing animation:', actionName)
         if (actions[actionName]) {
           const action = actions[actionName]
           action.setLoop(THREE.LoopOnce, 1) // Play once, then stop
@@ -61,7 +61,7 @@ function Model() {
       }
       
       // Fallback: play first animation directly using mixer
-      console.log('Playing animation directly via mixer')
+      // console.log('Playing animation directly via mixer')
       const clip = animations[0]
       const action = mixer.clipAction(clip, scene)
       action.setLoop(THREE.LoopOnce, 1) // Play once, then stop
