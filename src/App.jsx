@@ -52,25 +52,35 @@ function Model() {
     const baseSpeedMultiplier = 0.01;
     const ballSpinMultiplier = 0.05;
 
-    const handleMouseDown = (e) => {
-      physics.current.isDragging = true;
-      physics.current.lastY = e.clientY;
-      physics.current.lastTime = performance.now();
-      physics.current.dragSpeed = 0;
+    const getClientY = (e) => {
+      // For touch events, use touches[0].clientY, for mouse use clientY
+      return e.touches ? e.touches[0].clientY : e.clientY;
     };
 
-    const handleMouseMove = (e) => {
+    const handleStart = (e) => {
+      physics.current.isDragging = true;
+      physics.current.lastY = getClientY(e);
+      physics.current.lastTime = performance.now();
+      physics.current.dragSpeed = 0;
+      // Prevent default to avoid scrolling on mobile
+      if (e.touches) {
+        e.preventDefault();
+      }
+    };
+
+    const handleMove = (e) => {
       if (!physics.current.isDragging) return;
 
       const currentTime = performance.now();
       const deltaTime = currentTime - physics.current.lastTime;
-      const deltaY = e.clientY - physics.current.lastY;
+      const currentY = getClientY(e);
+      const deltaY = currentY - physics.current.lastY;
       
       // Calculate drag speed (pixels per millisecond)
       const speed = Math.abs(deltaY) / Math.max(deltaTime, 1);
       physics.current.dragSpeed = speed;
       
-      physics.current.lastY = e.clientY;
+      physics.current.lastY = currentY;
       physics.current.lastTime = currentTime;
 
       // Use drag speed to determine animation speed
@@ -86,21 +96,37 @@ function Model() {
       }
 
       physics.current.targetSpinVelocity = deltaY * ballSpinSpeed;
+
+      // Prevent default to avoid scrolling on mobile
+      if (e.touches) {
+        e.preventDefault();
+      }
     };
 
-    const handleMouseUp = () => {
+    const handleEnd = () => {
       physics.current.isDragging = false;
       physics.current.dragSpeed = 0;
     };
 
-    window.addEventListener("mousedown", handleMouseDown);
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    // Mouse events
+    window.addEventListener("mousedown", handleStart);
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleEnd);
+
+    // Touch events for mobile
+    window.addEventListener("touchstart", handleStart, { passive: false });
+    window.addEventListener("touchmove", handleMove, { passive: false });
+    window.addEventListener("touchend", handleEnd);
+    window.addEventListener("touchcancel", handleEnd);
 
     return () => {
-      window.removeEventListener("mousedown", handleMouseDown);
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousedown", handleStart);
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleEnd);
+      window.removeEventListener("touchstart", handleStart);
+      window.removeEventListener("touchmove", handleMove);
+      window.removeEventListener("touchend", handleEnd);
+      window.removeEventListener("touchcancel", handleEnd);
     };
   }, []);
 
