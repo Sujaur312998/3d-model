@@ -1,107 +1,112 @@
-import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, useGLTF, useAnimations } from '@react-three/drei'
-import { useRef, useEffect, useMemo } from 'react'
-import * as THREE from 'three'
+import React, { useRef, useEffect, useMemo } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import {
+  OrbitControls,
+  useGLTF,
+  useAnimations,
+  Center,
+} from "@react-three/drei";
+import * as THREE from "three";
 
 function Model() {
-  const { scene, animations } = useGLTF('/model.glb')
-  const groupRef = useRef()
-  const sceneRef = useMemo(() => ({ current: scene }), [scene])
-  const { actions, mixer, names } = useAnimations(animations, sceneRef)
-  const circleRef = useRef()
+  const { scene, animations } = useGLTF("/model.glb");
+  const sceneRef = useMemo(() => ({ current: scene }), [scene]);
+  const { mixer, actions, names } = useAnimations(animations, sceneRef);
+
+  const ballsRef = useRef([]);
+
+  const physics = useRef({
+    scrollPos: 0,
+    targetScroll: 0,
+    maxTime: 0,
+    spinVelocity: 0,
+    targetSpinVelocity: 0,
+  });
 
   useEffect(() => {
+    if (actions && names.length > 0) {
+      const action = actions[names[0]];
+      action.play();
+      action.paused = true;
+      physics.current.maxTime = action.getClip().duration;
+    }
+
+    ballsRef.current = [];
     scene.traverse((child) => {
-      // console.log(child.name, child.type)
-      if (child.name.includes('circle') || child.name.includes('Circle') || child.name.includes('balls') || child.name.includes('Balls')) {
-        circleRef.current = child
+      if (
+        child.isMesh &&
+        (child.name.toLowerCase().includes("ball") ||
+          child.name.toLowerCase().includes("circle") ||
+          child.name.toLowerCase().includes("sphere"))
+      ) {
+        ballsRef.current.push(child);
       }
-    })
-    
-    // Debug: Log available animations
-    // console.log('Available animations:', animations)
-    // console.log('Animation names:', names)
-    // console.log('Actions:', actions)
-  }, [scene, animations, names, actions])
+    });
+  }, [actions, names, scene]);
 
-  // Update animation mixer each frame
+  useEffect(() => {
+    const handleScroll = (e) => {
+      const handMoveSpeed = 0.001;
+      const ballSpinSpeed = 0.0005;
+
+      physics.current.targetScroll += e.deltaY * handMoveSpeed;
+
+      if (physics.current.targetScroll < 0) physics.current.targetScroll = 0;
+      if (physics.current.targetScroll > physics.current.maxTime) {
+        physics.current.targetScroll = physics.current.maxTime;
+      }
+
+      physics.current.targetSpinVelocity = e.deltaY * ballSpinSpeed;
+    };
+
+    window.addEventListener("wheel", handleScroll);
+    return () => window.removeEventListener("wheel", handleScroll);
+  }, []);
+
   useFrame((state, delta) => {
-    if (mixer) {
-      mixer.update(delta)
-    }
-  })
+    const p = physics.current;
+    p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.08);
+    if (mixer) mixer.setTime(p.scrollPos);
 
-  // Play animation on click
-  const handleClick = (event) => {
-    event.stopPropagation()
-    // console.log('Click detected!')
-    // console.log('Animations:', animations)
-    // console.log('Actions:', actions)
-    // console.log('Names:', names)
-    
-    if (animations && animations.length > 0 && mixer) {
-      // Stop all currently playing animations
-      Object.values(actions).forEach(action => {
-        if (action) {
-          action.stop()
-        }
-      })
-      
-      // Try to play by name first
-      if (names && names.length > 0) {
-        const actionName = names[0]
-        // console.log('Playing animation:', actionName)
-        if (actions[actionName]) {
-          const action = actions[actionName]
-          action.setLoop(THREE.LoopOnce, 1) // Play once, then stop
-          action.clampWhenFinished = true // Keep at the last frame
-          action.reset().fadeIn(0.5).play()
-          return
-        }
-      }
-      
-      // Fallback: play first animation directly using mixer
-      // console.log('Playing animation directly via mixer')
-      const clip = animations[0]
-      const action = mixer.clipAction(clip, scene)
-      action.setLoop(THREE.LoopOnce, 1) // Play once, then stop
-      action.clampWhenFinished = true // Keep at the last frame
-      action.reset().fadeIn(0.5).play()
-    } else {
-      console.log('No animations or mixer available')
-    }
-  }
+    p.spinVelocity += (p.targetSpinVelocity - p.spinVelocity) * 0.05;
+    p.targetSpinVelocity *= 0.95;
 
+    if (ballsRef.current.length > 0) {
+      ballsRef.current.forEach((ball) => {
+        ball.rotation.x += p.spinVelocity;
+      });
+    }
+  });
+
+  // Use Center to keep the human in the middle of the screen
   return (
-    <group ref={groupRef}>
-      <primitive 
-        object={scene} 
-        onClick={handleClick} 
-        onPointerDown={handleClick}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          document.body.style.cursor = 'pointer'
-        }}
-        onPointerOut={(e) => {
-          e.stopPropagation()
-          document.body.style.cursor = 'default'
-        }}
-      />
-    </group>
-  )
+    <Center>
+      <primitive object={scene} />
+    </Center>
+  );
 }
 
 function App() {
   return (
-    <div style={{ height: '100vh' }}>
-      <Canvas camera={{ position: [0, 0, 5], fov: 75 }}>
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 5]} intensity={1} />
+    <div style={{ height: "100vh", width: "100vw", background: "#f5f5f5" }}>
+      {/* CAMERA ADJUSTMENT: 
+         Set Z to 11 (or higher) to fit the full body since user cannot zoom out.
+      */}
+      <Canvas camera={{ position: [0, 0, 11], fov: 45 }}>
+        <ambientLight intensity={0.8} />
+        <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow />
+        <directionalLight position={[-5, 0, 0]} intensity={0.5} />
+
         <Model />
-        <OrbitControls enableRotate={false} enablePan={false} enableZoom={true} />
+
+        <OrbitControls
+          enableZoom={false} // <--- FIX: Disables size change on scroll
+          enablePan={false} // Keeps model centered
+          enableRotate={false} // Allows rotating around the model
+        />
       </Canvas>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
