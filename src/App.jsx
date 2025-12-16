@@ -21,6 +21,10 @@ function Model() {
     maxTime: 0,
     spinVelocity: 0,
     targetSpinVelocity: 0,
+    isDragging: false,
+    lastY: 0,
+    lastTime: 0,
+    dragSpeed: 0,
   });
 
   useEffect(() => {
@@ -45,22 +49,59 @@ function Model() {
   }, [actions, names, scene]);
 
   useEffect(() => {
-    const handleScroll = (e) => {
-      const handMoveSpeed = 0.001;
-      const ballSpinSpeed = 0.0005;
+    const baseSpeedMultiplier = 0.01;
+    const ballSpinMultiplier = 0.05;
 
-      physics.current.targetScroll += e.deltaY * handMoveSpeed;
+    const handleMouseDown = (e) => {
+      physics.current.isDragging = true;
+      physics.current.lastY = e.clientY;
+      physics.current.lastTime = performance.now();
+      physics.current.dragSpeed = 0;
+    };
+
+    const handleMouseMove = (e) => {
+      if (!physics.current.isDragging) return;
+
+      const currentTime = performance.now();
+      const deltaTime = currentTime - physics.current.lastTime;
+      const deltaY = e.clientY - physics.current.lastY;
+      
+      // Calculate drag speed (pixels per millisecond)
+      const speed = Math.abs(deltaY) / Math.max(deltaTime, 1);
+      physics.current.dragSpeed = speed;
+      
+      physics.current.lastY = e.clientY;
+      physics.current.lastTime = currentTime;
+
+      // Use drag speed to determine animation speed
+      const speedMultiplier = Math.max(speed / 10, 0.1); // Normalize speed, min 0.1
+      const handMoveSpeed = baseSpeedMultiplier * speedMultiplier;
+      const ballSpinSpeed = ballSpinMultiplier * speedMultiplier;
+
+      physics.current.targetScroll += deltaY * handMoveSpeed;
 
       if (physics.current.targetScroll < 0) physics.current.targetScroll = 0;
       if (physics.current.targetScroll > physics.current.maxTime) {
         physics.current.targetScroll = physics.current.maxTime;
       }
 
-      physics.current.targetSpinVelocity = e.deltaY * ballSpinSpeed;
+      physics.current.targetSpinVelocity = deltaY * ballSpinSpeed;
     };
 
-    window.addEventListener("wheel", handleScroll);
-    return () => window.removeEventListener("wheel", handleScroll);
+    const handleMouseUp = () => {
+      physics.current.isDragging = false;
+      physics.current.dragSpeed = 0;
+    };
+
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
   }, []);
 
   useFrame((state, delta) => {
