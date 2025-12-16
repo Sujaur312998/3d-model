@@ -78,7 +78,6 @@ function Model() {
     }
   });
 
-  // Use Center to keep the human in the middle of the screen
   return (
     <Center>
       <primitive object={scene} />
@@ -89,9 +88,7 @@ function Model() {
 function App() {
   return (
     <div style={{ height: "100vh", width: "100vw", background: "#f5f5f5" }}>
-      {/* CAMERA ADJUSTMENT: 
-         Set Z to 11 (or higher) to fit the full body since user cannot zoom out.
-      */}
+
       <Canvas camera={{ position: [0, 0, 11], fov: 45 }}>
         <ambientLight intensity={0.8} />
         <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow />
@@ -100,9 +97,9 @@ function App() {
         <Model />
 
         <OrbitControls
-          enableZoom={false} // <--- FIX: Disables size change on scroll
-          enablePan={false} // Keeps model centered
-          enableRotate={false} // Allows rotating around the model
+          enableZoom={false} 
+          enablePan={false} 
+          enableRotate={false} 
         />
       </Canvas>
     </div>
