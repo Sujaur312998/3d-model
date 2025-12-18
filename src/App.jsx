@@ -108,23 +108,23 @@ function Model() {
       physics.current.lastY = currentY;
       physics.current.lastTime = currentTime;
 
-      // Use drag speed to determine animation speed
-      const speedMultiplier = Math.max(speed / 5, 0.5); // Increased minimum and sensitivity
-      const handMoveSpeed = baseSpeedMultiplier * speedMultiplier * 2; // Doubled base responsiveness
-      const ballSpinSpeed = ballSpinMultiplier * speedMultiplier;
+      // Use drag distance to drive the interaction
+      // A drag of roughly 250 pixels will complete one full interaction cycle
+      const interactionScale = 1 / 250;
+      const movement = -deltaY * interactionScale;
 
-      // Invert deltaY for targetScroll: Dragging UP (negative deltaY) should increase scrollPos (lifting)
-      physics.current.targetScroll -= deltaY * handMoveSpeed;
-      
-      // Update hand offset for the gesture (inverted deltaY because mouse UP is negative Y)
-      physics.current.handOffset -= deltaY * 0.025; // Significantly increased sensitivity for small drags
+      physics.current.targetScroll += movement * physics.current.maxTime;
+      physics.current.handOffset += movement;
 
       if (physics.current.targetScroll < 0) physics.current.targetScroll = 0;
       if (physics.current.targetScroll > physics.current.maxTime) {
         physics.current.targetScroll = physics.current.maxTime;
       }
+      
+      // Clamp hand offset between -1 and 1 for the procedural arm logic
+      physics.current.handOffset = THREE.MathUtils.clamp(physics.current.handOffset, -1, 1);
 
-      physics.current.targetSpinVelocity = deltaY * ballSpinSpeed;
+      physics.current.targetSpinVelocity = deltaY * ballSpinMultiplier * 0.5;
 
       // Prevent default to avoid scrolling on mobile
       if (e.touches) {
@@ -164,8 +164,8 @@ function Model() {
     
     // Decay handOffset and targetScroll back to 0 when not dragging
     if (!p.isDragging) {
-      p.targetScroll = THREE.MathUtils.lerp(p.targetScroll, 0, 0.03); // Slower decay to keep pose longer
-      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.03);
+      p.targetScroll = THREE.MathUtils.lerp(p.targetScroll, 0, 0.08); // Reset faster when let go
+      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.08);
     }
 
     p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.15); // Snappier response
