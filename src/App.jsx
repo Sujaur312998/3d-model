@@ -109,15 +109,15 @@ function Model() {
       physics.current.lastTime = currentTime;
 
       // Use drag speed to determine animation speed
-      const speedMultiplier = Math.max(speed / 10, 0.1); // Normalize speed, min 0.1
-      const handMoveSpeed = baseSpeedMultiplier * speedMultiplier;
+      const speedMultiplier = Math.max(speed / 5, 0.5); // Increased minimum and sensitivity
+      const handMoveSpeed = baseSpeedMultiplier * speedMultiplier * 2; // Doubled base responsiveness
       const ballSpinSpeed = ballSpinMultiplier * speedMultiplier;
 
       // Invert deltaY for targetScroll: Dragging UP (negative deltaY) should increase scrollPos (lifting)
       physics.current.targetScroll -= deltaY * handMoveSpeed;
       
       // Update hand offset for the gesture (inverted deltaY because mouse UP is negative Y)
-      physics.current.handOffset -= deltaY * 0.008; // Slightly increased sensitivity
+      physics.current.handOffset -= deltaY * 0.025; // Significantly increased sensitivity for small drags
 
       if (physics.current.targetScroll < 0) physics.current.targetScroll = 0;
       if (physics.current.targetScroll > physics.current.maxTime) {
@@ -164,11 +164,11 @@ function Model() {
     
     // Decay handOffset and targetScroll back to 0 when not dragging
     if (!p.isDragging) {
-      p.targetScroll = THREE.MathUtils.lerp(p.targetScroll, 0, 0.05);
-      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.05);
+      p.targetScroll = THREE.MathUtils.lerp(p.targetScroll, 0, 0.03); // Slower decay to keep pose longer
+      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.03);
     }
 
-    p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.08);
+    p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.15); // Snappier response
     if (mixer) mixer.setTime(p.scrollPos);
 
     const motion = THREE.MathUtils.clamp(p.handOffset, -1, 1);
@@ -183,7 +183,7 @@ function Model() {
       p.leftArm.rotation.x = THREE.MathUtils.lerp(
         p.leftArm.rotation.x, 
         p.leftArmBaseRotation.x + targetRotation, 
-        0.1
+        0.2 // Snappier arm movement
       );
       
       // Subtle position reset
