@@ -19,16 +19,21 @@ function Model() {
     scrollPos: 0,
     targetScroll: 0,
     maxTime: 0,
+    scrollVelocity: 0,
     spinVelocity: 0,
     targetSpinVelocity: 0,
     isDragging: false,
     lastY: 0,
+    startY: 0,
     lastTime: 0,
     dragSpeed: 0,
     leftShoulder: null,
     leftArm: null,
     leftWrist: null,
     handOffset: 0,
+    handInteractionTriggered: false,
+    handInteractionProgress: 0,
+    handInteractionDirection: 0,
   });
 
   useEffect(() => {
@@ -45,6 +50,7 @@ function Model() {
     physics.current.leftWrist = null;
     physics.current.leftArmBaseRotation = new THREE.Euler(); // To store original pose
     physics.current.smoothMotion = 0; // For jitter-free smoothing
+    physics.current.handInteractionTriggered = false;
 
     scene.traverse((child) => {
       // ... (keep existing ball detection)
@@ -85,7 +91,11 @@ function Model() {
 
     const handleStart = (e) => {
       physics.current.isDragging = true;
-      physics.current.lastY = getClientY(e);
+      physics.current.handInteractionTriggered = false;
+      physics.current.handInteractionProgress = 0;
+      const currentY = getClientY(e);
+      physics.current.lastY = currentY;
+      physics.current.startY = currentY;
       physics.current.lastTime = performance.now();
       physics.current.dragSpeed = 0;
       // Prevent default to avoid scrolling on mobile
@@ -113,17 +123,26 @@ function Model() {
       // A drag of roughly 250 pixels will complete one full interaction cycle
       const interactionScale = 1 / 250;
       const movement = -deltaY * interactionScale;
+      const timeDelta = movement * physics.current.maxTime;
 
-      physics.current.targetScroll += movement * physics.current.maxTime;
-      physics.current.handOffset += movement;
-
-      if (physics.current.targetScroll < 0) physics.current.targetScroll = 0;
-      if (physics.current.targetScroll > physics.current.maxTime) {
-        physics.current.targetScroll = physics.current.maxTime;
+      physics.current.targetScroll += timeDelta;
+      
+      // Trigger a single hand interaction per drag based on displacement
+      if (!physics.current.handInteractionTriggered) {
+        const totalDisplacement = currentY - physics.current.startY;
+        // Trigger if we've moved significantly (e.g., 20 pixels)
+        if (Math.abs(totalDisplacement) > 20) {
+          physics.current.handInteractionTriggered = true;
+          // Direction: drag up (negative deltaY) -> wave up (positive handOffset)
+          physics.current.handInteractionDirection = totalDisplacement < 0 ? 1 : -1;
+          physics.current.handInteractionProgress = 0;
+        }
       }
       
-      // Clamp hand offset between -1 and 1 for the procedural arm logic
-      physics.current.handOffset = THREE.MathUtils.clamp(physics.current.handOffset, -1, 1);
+      // Update velocity based on recent movement
+      if (deltaTime > 0) {
+        physics.current.scrollVelocity = timeDelta / (deltaTime / 16.6); // normalize to ~60fps frames
+      }
 
       physics.current.targetSpinVelocity = deltaY * ballSpinMultiplier * 0.5;
 
@@ -163,14 +182,33 @@ function Model() {
   useFrame((state, delta) => {
     const p = physics.current;
     
-    // Decay handOffset and targetScroll back to 0 when not dragging
+    // Momentum and Decay
     if (!p.isDragging) {
-      p.targetScroll = THREE.MathUtils.lerp(p.targetScroll, 0, 0.08); // Reset faster when let go
-      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.08);
+      p.targetScroll += p.scrollVelocity;
+      p.scrollVelocity *= 0.95; // Gradually speed down
+    } else {
+      // While dragging, we can slightly dampen the stored velocity to keep it fresh
+      p.scrollVelocity *= 0.8;
+    }
+
+    // Animate the one-shot hand interaction
+    if (p.handInteractionTriggered && p.handInteractionProgress < 1) {
+      p.handInteractionProgress += delta * 2.5; // Wave speed
+      const progress = Math.min(p.handInteractionProgress, 1);
+      // Sine wave for 0 -> 1 -> 0 cycle
+      p.handOffset = Math.sin(progress * Math.PI) * p.handInteractionDirection;
+    } else {
+      // Return to rest position
+      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.1);
     }
 
     p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.1);
-    if (mixer) mixer.setTime(p.scrollPos);
+    
+    if (mixer && p.maxTime > 0) {
+      // Use modulo for infinite rotation (handles negative values correctly)
+      const loopedTime = ((p.scrollPos % p.maxTime) + p.maxTime) % p.maxTime;
+      mixer.setTime(loopedTime);
+    }
 
     // Smooth the motion factor itself instead of the bone property to prevent jitter
     p.smoothMotion = THREE.MathUtils.lerp(p.smoothMotion, p.handOffset, 0.1);
@@ -206,7 +244,7 @@ function Model() {
       });
     }
   });
-
+  
   return (
     <Center>
       <primitive object={scene} />
