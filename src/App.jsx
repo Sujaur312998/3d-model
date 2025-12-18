@@ -25,18 +25,28 @@ function Model() {
     lastY: 0,
     lastTime: 0,
     dragSpeed: 0,
+    leftShoulder: null,
+    leftArm: null,
+    leftWrist: null,
+    handOffset: 0,
   });
 
   useEffect(() => {
     if (actions && names.length > 0) {
       const action = actions[names[0]];
       action.play();
-      action.paused = true;
+      action.paused = false; // Set to false to allow continuous looping
       physics.current.maxTime = action.getClip().duration;
     }
 
     ballsRef.current = [];
+    physics.current.leftShoulder = null;
+    physics.current.leftArm = null;
+    physics.current.leftWrist = null;
+    physics.current.leftArmBaseRotation = new THREE.Euler(); // To store original pose
+
     scene.traverse((child) => {
+      // ... (keep existing ball detection)
       if (
         child.isMesh &&
         (child.name.toLowerCase().includes("ball") ||
@@ -45,12 +55,27 @@ function Model() {
       ) {
         ballsRef.current.push(child);
       }
+
+      // Find left arm chain
+      const name = child.name.toLowerCase();
+      const isLeft = name.includes("left") || name.startsWith("l_") || name.includes("_l") || name.includes(".l");
+      
+      if (isLeft) {
+        if (name.includes("shoulder") || name.includes("uparm") || name.includes("upperarm")) {
+          physics.current.leftShoulder = child;
+        } else if (name.includes("forearm") || name.includes("lowerarm") || (name.includes("arm") && !name.includes("up"))) {
+          physics.current.leftArm = child;
+          physics.current.leftArmBaseRotation.copy(child.rotation); // Capture original rotation
+        } else if (name.includes("wrist") || name.includes("hand")) {
+          physics.current.leftWrist = child;
+        }
+      }
     });
   }, [actions, names, scene]);
 
   useEffect(() => {
     const baseSpeedMultiplier = 0.01;
-    const ballSpinMultiplier = 0.05;
+    const ballSpinMultiplier = 0.1; // Increased for more dramatic hand/ball spin interaction
 
     const getClientY = (e) => {
       // For touch events, use touches[0].clientY, for mouse use clientY
@@ -88,7 +113,11 @@ function Model() {
       const handMoveSpeed = baseSpeedMultiplier * speedMultiplier;
       const ballSpinSpeed = ballSpinMultiplier * speedMultiplier;
 
-      physics.current.targetScroll += deltaY * handMoveSpeed;
+      // Invert deltaY for targetScroll: Dragging UP (negative deltaY) should increase scrollPos (lifting)
+      physics.current.targetScroll -= deltaY * handMoveSpeed;
+      
+      // Update hand offset for the gesture (inverted deltaY because mouse UP is negative Y)
+      physics.current.handOffset -= deltaY * 0.008; // Slightly increased sensitivity
 
       if (physics.current.targetScroll < 0) physics.current.targetScroll = 0;
       if (physics.current.targetScroll > physics.current.maxTime) {
@@ -132,8 +161,41 @@ function Model() {
 
   useFrame((state, delta) => {
     const p = physics.current;
+    
+    // Decay handOffset and targetScroll back to 0 when not dragging
+    if (!p.isDragging) {
+      p.targetScroll = THREE.MathUtils.lerp(p.targetScroll, 0, 0.05);
+      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.05);
+    }
+
     p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.08);
     if (mixer) mixer.setTime(p.scrollPos);
+
+    const motion = THREE.MathUtils.clamp(p.handOffset, -1, 1);
+
+    if (p.leftArm) {
+      // Rotation logic relative to base rotation
+      const angleUp = 90 * (Math.PI / 180);
+      const angleDown = 20 * (Math.PI / 180);
+      const targetRotation = motion > 0 ? motion * angleUp : motion * angleDown;
+      
+      // Add the interaction rotation TO the base rotation
+      p.leftArm.rotation.x = THREE.MathUtils.lerp(
+        p.leftArm.rotation.x, 
+        p.leftArmBaseRotation.x + targetRotation, 
+        0.1
+      );
+      
+      // Subtle position reset
+      const targetLift = motion > 0 ? motion * 0.2 : motion * 0.1;
+      p.leftArm.position.y = THREE.MathUtils.lerp(p.leftArm.position.y, targetLift, 0.1);
+    }
+    
+    if (p.leftWrist) {
+      // Wrist follows the lift subtly
+      const targetWristLift = motion > 0 ? motion * 0.1 : motion * 0.05;
+      p.leftWrist.position.y = THREE.MathUtils.lerp(p.leftWrist.position.y, targetWristLift, 0.1);
+    }
 
     p.spinVelocity += (p.targetSpinVelocity - p.spinVelocity) * 0.05;
     p.targetSpinVelocity *= 0.95;
