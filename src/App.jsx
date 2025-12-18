@@ -44,6 +44,7 @@ function Model() {
     physics.current.leftArm = null;
     physics.current.leftWrist = null;
     physics.current.leftArmBaseRotation = new THREE.Euler(); // To store original pose
+    physics.current.smoothMotion = 0; // For jitter-free smoothing
 
     scene.traverse((child) => {
       // ... (keep existing ball detection)
@@ -168,10 +169,12 @@ function Model() {
       p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, 0.08);
     }
 
-    p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.15); // Snappier response
+    p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, 0.1);
     if (mixer) mixer.setTime(p.scrollPos);
 
-    const motion = THREE.MathUtils.clamp(p.handOffset, -1, 1);
+    // Smooth the motion factor itself instead of the bone property to prevent jitter
+    p.smoothMotion = THREE.MathUtils.lerp(p.smoothMotion, p.handOffset, 0.1);
+    const motion = THREE.MathUtils.clamp(p.smoothMotion, -1, 1);
 
     if (p.leftArm) {
       // Rotation logic relative to base rotation
@@ -179,22 +182,19 @@ function Model() {
       const angleDown = 20 * (Math.PI / 180);
       const targetRotation = motion > 0 ? motion * angleUp : motion * angleDown;
       
-      // Add the interaction rotation TO the base rotation
-      p.leftArm.rotation.x = THREE.MathUtils.lerp(
-        p.leftArm.rotation.x, 
-        p.leftArmBaseRotation.x + targetRotation, 
-        0.2 // Snappier arm movement
-      );
+      // Set absolute rotation based on base pose + smoothed motion
+      // This prevents the "fight" with the animation mixer
+      p.leftArm.rotation.x = p.leftArmBaseRotation.x + targetRotation;
       
       // Subtle position reset
       const targetLift = motion > 0 ? motion * 0.2 : motion * 0.1;
-      p.leftArm.position.y = THREE.MathUtils.lerp(p.leftArm.position.y, targetLift, 0.1);
+      p.leftArm.position.y = targetLift;
     }
     
     if (p.leftWrist) {
       // Wrist follows the lift subtly
       const targetWristLift = motion > 0 ? motion * 0.1 : motion * 0.05;
-      p.leftWrist.position.y = THREE.MathUtils.lerp(p.leftWrist.position.y, targetWristLift, 0.1);
+      p.leftWrist.position.y = targetWristLift;
     }
 
     p.spinVelocity += (p.targetSpinVelocity - p.spinVelocity) * 0.05;
@@ -218,7 +218,7 @@ function App() {
   return (
     <div style={{ height: "100vh", width: "100vw", background: "#f5f5f5" }}>
 
-      <Canvas camera={{ position: [0, 0, 11], fov: 45 }}>
+      <Canvas camera={{ position: [2, 0, 11], fov: 45 }}>
         <ambientLight intensity={0.8} />
         <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow />
         <directionalLight position={[-5, 0, 0]} intensity={0.5} />
