@@ -3,6 +3,29 @@ import { OrbitControls, useGLTF, useAnimations } from '@react-three/drei'
 import { useRef, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 
+// Custom hook for typing effect
+function useTypingEffect(text, speed = 50) {
+  const [displayText, setDisplayText] = useState('')
+  
+  useEffect(() => {
+    setDisplayText('')
+    let currentIndex = 0
+    
+    const interval = setInterval(() => {
+      if (currentIndex <= text.length) {
+        setDisplayText(text.slice(0, currentIndex))
+        currentIndex++
+      } else {
+        clearInterval(interval)
+      }
+    }, speed)
+    
+    return () => clearInterval(interval)
+  }, [text, speed])
+  
+  return displayText
+}
+
 // Ball names
 const BALL_NAMES = [
   'Web Development',
@@ -157,8 +180,10 @@ function App() {
   const touchStartY = useRef(0)
   const touchStartX = useRef(0)
   const containerRef = useRef()
-  const [showInstructions, setShowInstructions] = useState(true)
-  const [currentBallInHand, setCurrentBallInHand] = useState(null)
+  const [currentBallInHand, setCurrentBallInHand] = useState(0)
+  
+  // Use typing effect for the current ball name
+  const typedBallName = useTypingEffect(BALL_NAMES[currentBallInHand], 50)
 
   // Handle touch start
   const handleTouchStart = (e) => {
@@ -189,7 +214,7 @@ function App() {
         setSwapCount(prev => prev + 1)
         // Only change colors after the first swap
         setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
-        setShowInstructions(false)
+        // setShowInstructions(false)
       }
     }
     
@@ -222,7 +247,7 @@ function App() {
       setSwapCount(prev => prev + 1)
       // Only change colors after the first swap
       setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
-      setShowInstructions(false)
+      // setShowInstructions(false)
     }
     
     isMouseDown.current = false
@@ -238,8 +263,9 @@ function App() {
   }
 
   // Handle when ball is in hand
-  const handleBallInHand = (ballIndex) => {
-    setCurrentBallInHand(ballIndex)
+  const handleBallInHand = () => {
+    // Increment the ball index with each swap
+    setCurrentBallInHand(prev => (prev + 1) % 5)
   }
 
   return (
@@ -278,27 +304,29 @@ function App() {
         />
       </Canvas>
       
-      {/* Display current ball name */}
+      {/* Display current ball name with typing effect */}
       {currentBallInHand !== null && (
         <div style={{
           position: 'absolute',
           top: '20px',
           left: '50%',
           transform: 'translateX(-50%)',
-          backgroundColor: 'rgba(0, 0, 0, 0.85)',
-          color: 'white',
+          color: 'black',
           padding: '20px 40px',
           borderRadius: '15px',
           fontSize: '24px',
           fontWeight: 'bold',
           zIndex: 1000,
           textAlign: 'center',
-          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.4)',
           animation: 'fadeIn 0.6s ease-out forwards',
           fontFamily: 'system-ui, -apple-system, sans-serif',
-          letterSpacing: '0.5px'
+          letterSpacing: '0.5px',
+          minHeight: '64px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}>
-          {BALL_NAMES[currentBallInHand]}
+          {typedBallName}
         </div>
       )}
     </div>
