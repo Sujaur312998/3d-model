@@ -3,7 +3,16 @@ import { OrbitControls, useGLTF, useAnimations } from '@react-three/drei'
 import { useRef, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 
-function Model({ onSwipe, swapIndex }) {
+// Ball names
+const BALL_NAMES = [
+  'Web Development',
+  'Branding and Communication',
+  'AI Analyst & Developer',
+  'Strategy and Marketing',
+  'Software & App Developer'
+]
+
+function Model({ onSwipe, swapIndex, onBallInHand }) {
   const { scene, animations } = useGLTF('/model.glb')
   const groupRef = useRef()
   const sceneRef = useMemo(() => ({ current: scene }), [scene])
@@ -91,24 +100,39 @@ function Model({ onSwipe, swapIndex }) {
         }
       })
       
+      let action = null
+      
       // Try to play by name first
       if (names && names.length > 0) {
         const actionName = names[0]
         if (actions[actionName]) {
-          const action = actions[actionName]
+          action = actions[actionName]
           action.setLoop(THREE.LoopOnce, 1)
           action.clampWhenFinished = true
           action.reset().fadeIn(0.5).play()
-          return
         }
       }
       
       // Fallback: play first animation directly using mixer
-      const clip = animations[0]
-      const action = mixer.clipAction(clip, scene)
-      action.setLoop(THREE.LoopOnce, 1)
-      action.clampWhenFinished = true
-      action.reset().fadeIn(0.5).play()
+      if (!action) {
+        const clip = animations[0]
+        action = mixer.clipAction(clip, scene)
+        action.setLoop(THREE.LoopOnce, 1)
+        action.clampWhenFinished = true
+        action.reset().fadeIn(0.5).play()
+      }
+      
+      // Listen for animation finish to notify when ball is in hand
+      if (action && mixer) {
+        const onFinished = (e) => {
+          if (e.action === action) {
+            // Animation finished, ball is now in hand
+            onBallInHand(swapIndex)
+            mixer.removeEventListener('finished', onFinished)
+          }
+        }
+        mixer.addEventListener('finished', onFinished)
+      }
     }
   }
 
@@ -134,6 +158,7 @@ function App() {
   const touchStartX = useRef(0)
   const containerRef = useRef()
   const [showInstructions, setShowInstructions] = useState(true)
+  const [currentBallInHand, setCurrentBallInHand] = useState(null)
 
   // Handle touch start
   const handleTouchStart = (e) => {
@@ -212,6 +237,11 @@ function App() {
     isMouseDown.current = false
   }
 
+  // Handle when ball is in hand
+  const handleBallInHand = (ballIndex) => {
+    setCurrentBallInHand(ballIndex)
+  }
+
   return (
     <div 
       ref={containerRef}
@@ -238,7 +268,7 @@ function App() {
         />
         <pointLight position={[10, 10, 10]} intensity={0.5} />
         
-        <Model onSwipe={swipeTrigger} swapIndex={swapIndex} />
+        <Model onSwipe={swipeTrigger} swapIndex={swapIndex} onBallInHand={handleBallInHand} />
         <OrbitControls 
           enableRotate={false} 
           enablePan={false} 
@@ -246,7 +276,31 @@ function App() {
           maxDistance={10}
           minDistance={3}
         />
-      </Canvas>     
+      </Canvas>
+      
+      {/* Display current ball name */}
+      {currentBallInHand !== null && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          color: 'white',
+          padding: '20px 40px',
+          borderRadius: '15px',
+          fontSize: '24px',
+          fontWeight: 'bold',
+          zIndex: 1000,
+          textAlign: 'center',
+          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.4)',
+          animation: 'fadeIn 0.6s ease-out forwards',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          letterSpacing: '0.5px'
+        }}>
+          {BALL_NAMES[currentBallInHand]}
+        </div>
+      )}
     </div>
   )
 }
