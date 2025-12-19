@@ -173,22 +173,6 @@ function App() {
     touchStartX.current = 0
   }
 
-  // Handle wheel event (for mouse wheel/trackpad)
-  const handleWheel = (e) => {
-    // Prevent page scrolling
-    e.preventDefault()
-    
-    // Minimum wheel delta to trigger animation
-    const minWheelDelta = 50
-    
-    if (Math.abs(e.deltaY) > minWheelDelta) {
-      setSwipeTrigger(prev => prev + 1)
-      setSwapCount(prev => prev + 1)
-      // Only change colors after the first swap
-      setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
-      setShowInstructions(false)
-    }
-  }
 
   // Handle mouse down/up for desktop drag simulation
   const mouseStartY = useRef(0)
@@ -240,7 +224,6 @@ function App() {
       }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onMouseMove={handleMouseMove}
@@ -259,7 +242,7 @@ function App() {
         <OrbitControls 
           enableRotate={false} 
           enablePan={false} 
-          enableZoom={true}
+          enableZoom={false}
           maxDistance={10}
           minDistance={3}
         />
