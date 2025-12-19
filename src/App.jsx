@@ -129,6 +129,7 @@ function Model({ onSwipe, swapIndex }) {
 function App() {
   const [swipeTrigger, setSwipeTrigger] = useState(0)
   const [swapIndex, setSwapIndex] = useState(0)
+  const [swapCount, setSwapCount] = useState(0)
   const touchStartY = useRef(0)
   const touchStartX = useRef(0)
   const containerRef = useRef()
@@ -160,7 +161,9 @@ function App() {
       if (Math.abs(deltaY) > minSwipeDistance) {
         // Trigger animation on any vertical swipe (up or down)
         setSwipeTrigger(prev => prev + 1)
-        setSwapIndex(prev => (prev + 1) % 5) // Cycle through 0-4
+        setSwapCount(prev => prev + 1)
+        // Only change colors after the first swap
+        setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
         setShowInstructions(false)
       }
     }
@@ -180,7 +183,9 @@ function App() {
     
     if (Math.abs(e.deltaY) > minWheelDelta) {
       setSwipeTrigger(prev => prev + 1)
-      setSwapIndex(prev => (prev + 1) % 5) // Cycle through 0-4
+      setSwapCount(prev => prev + 1)
+      // Only change colors after the first swap
+      setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
       setShowInstructions(false)
     }
   }
@@ -205,7 +210,9 @@ function App() {
     
     if (Math.abs(deltaY) > minDragDistance) {
       setSwipeTrigger(prev => prev + 1)
-      setSwapIndex(prev => (prev + 1) % 5) // Cycle through 0-4
+      setSwapCount(prev => prev + 1)
+      // Only change colors after the first swap
+      setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
       setShowInstructions(false)
     }
     
