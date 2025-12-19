@@ -3,23 +3,21 @@ import { OrbitControls, useGLTF, useAnimations } from '@react-three/drei'
 import { useRef, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 
-function Model({ onSwipe }) {
+function Model({ onSwipe, swapIndex }) {
   const { scene, animations } = useGLTF('/model.glb')
   const groupRef = useRef()
   const sceneRef = useMemo(() => ({ current: scene }), [scene])
   const { actions, mixer, names } = useAnimations(animations, sceneRef)
   const ballRefs = useRef([])
+  const ballColors = useRef([
+    new THREE.Color('#FF6B6B'), // Coral Red - 0
+    new THREE.Color('#4ECDC4'), // Turquoise - 1
+    new THREE.Color('#FFD166'), // Sun Yellow - 2
+    new THREE.Color('#06D6A0'), // Emerald Green - 3
+    new THREE.Color('#118AB2')  // Ocean Blue - 4
+  ])
 
   useEffect(() => {
-    // Colors for the balls - 5 distinct colors
-    const ballColors = [
-      new THREE.Color('#FF6B6B'), // Coral Red
-      new THREE.Color('#4ECDC4'), // Turquoise
-      new THREE.Color('#FFD166'), // Sun Yellow
-      new THREE.Color('#06D6A0'), // Emerald Green
-      new THREE.Color('#118AB2')  // Ocean Blue
-    ]
-
     let ballIndex = 0
     ballRefs.current = [] // Reset array
     
@@ -35,42 +33,46 @@ function Model({ onSwipe }) {
         // Store reference
         ballRefs.current.push(child)
         
-        // Assign color if we haven't used all colors yet
-        if (ballIndex < ballColors.length) {
-          // Clone the material to avoid affecting other instances
-          if (child.material) {
-            child.material = child.material.clone()
-            child.material.color = ballColors[ballIndex]
-            child.material.emissive = new THREE.Color(0x000000) // Reset emissive if any
-            child.material.needsUpdate = true
-            
-            // Optional: Add some shine to the balls
-            if (child.material.type === 'MeshStandardMaterial' || 
-                child.material.type === 'MeshPhysicalMaterial') {
-              child.material.metalness = 0.3
-              child.material.roughness = 0.4
-            }
-            
-            console.log(`Assigned color ${ballIndex + 1} to ball: ${child.name}`)
-            ballIndex++
+        // Clone the material to avoid affecting other instances
+        if (child.material && ballIndex < ballColors.current.length) {
+          child.material = child.material.clone()
+          child.material.emissive = new THREE.Color(0x000000) // Reset emissive if any
+          
+          // Optional: Add some shine to the balls
+          if (child.material.type === 'MeshStandardMaterial' || 
+              child.material.type === 'MeshPhysicalMaterial') {
+            child.material.metalness = 0.3
+            child.material.roughness = 0.4
           }
-        } else {
-          // For balls beyond 5, assign random colors or repeat the palette
-          if (child.material) {
-            child.material = child.material.clone()
-            const repeatIndex = ballIndex % ballColors.length
-            child.material.color = ballColors[repeatIndex]
-            child.material.needsUpdate = true
-            ballIndex++
-          }
+          
+          console.log(`Found ball ${ballIndex}: ${child.name}`)
+          ballIndex++
         }
       }
     })
 
-    // Log how many balls were found and colored
-    console.log(`Found and colored ${ballRefs.current.length} balls`)
+    // Log how many balls were found
+    console.log(`Found ${ballRefs.current.length} balls`)
 
   }, [scene])
+
+  // Update ball colors based on swap index
+  useEffect(() => {
+    if (ballRefs.current.length > 0) {
+      ballRefs.current.forEach((ball, index) => {
+        if (ball.material) {
+          // Rotate colors based on swap index
+          // swapIndex 0: [0,1,2,3,4] -> Red, Turquoise, Yellow, Green, Blue
+          // swapIndex 1: [1,2,3,4,0] -> Turquoise, Yellow, Green, Blue, Red
+          // swapIndex 2: [2,3,4,0,1] -> Yellow, Green, Blue, Red, Turquoise
+          const colorIndex = (index + swapIndex) % ballColors.current.length
+          ball.material.color = ballColors.current[colorIndex]
+          ball.material.needsUpdate = true
+        }
+      })
+      console.log(`Updated ball colors for swap ${swapIndex}`)
+    }
+  }, [swapIndex])
 
   // Update animation mixer each frame
   useFrame((state, delta) => {
@@ -126,6 +128,7 @@ function Model({ onSwipe }) {
 
 function App() {
   const [swipeTrigger, setSwipeTrigger] = useState(0)
+  const [swapIndex, setSwapIndex] = useState(0)
   const touchStartY = useRef(0)
   const touchStartX = useRef(0)
   const containerRef = useRef()
@@ -157,6 +160,7 @@ function App() {
       if (Math.abs(deltaY) > minSwipeDistance) {
         // Trigger animation on any vertical swipe (up or down)
         setSwipeTrigger(prev => prev + 1)
+        setSwapIndex(prev => (prev + 1) % 5) // Cycle through 0-4
         setShowInstructions(false)
       }
     }
@@ -176,6 +180,7 @@ function App() {
     
     if (Math.abs(e.deltaY) > minWheelDelta) {
       setSwipeTrigger(prev => prev + 1)
+      setSwapIndex(prev => (prev + 1) % 5) // Cycle through 0-4
       setShowInstructions(false)
     }
   }
@@ -200,6 +205,7 @@ function App() {
     
     if (Math.abs(deltaY) > minDragDistance) {
       setSwipeTrigger(prev => prev + 1)
+      setSwapIndex(prev => (prev + 1) % 5) // Cycle through 0-4
       setShowInstructions(false)
     }
     
@@ -208,9 +214,6 @@ function App() {
 
   const handleMouseMove = (e) => {
     if (!isMouseDown.current) return
-    
-    // Optional: Add visual feedback during drag
-    // You could add a visual indicator here
   }
 
   // Handle mouse leave
@@ -245,7 +248,7 @@ function App() {
         />
         <pointLight position={[10, 10, 10]} intensity={0.5} />
         
-        <Model onSwipe={swipeTrigger} />
+        <Model onSwipe={swipeTrigger} swapIndex={swapIndex} />
         <OrbitControls 
           enableRotate={false} 
           enablePan={false} 
