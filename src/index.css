@@ -66,3 +66,15 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 } */
+
+/* Fade in animation for ball name display */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    top: 0px;
+  }
+  to {
+    opacity: 1;
+    top: 20px;
+  }
+}
