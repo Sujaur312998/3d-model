@@ -1,252 +1,271 @@
-import React, { useRef, useEffect, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import {
-  OrbitControls,
-  useGLTF,
-  useAnimations,
-  Center,
-} from "@react-three/drei";
-import * as THREE from "three";
+import { Canvas, useFrame } from '@react-three/fiber'
+import { OrbitControls, useGLTF, useAnimations } from '@react-three/drei'
+import { useRef, useEffect, useMemo, useState } from 'react'
+import * as THREE from 'three'
 
-function Model() {
-  const { scene, animations } = useGLTF("/model.glb");
-  const sceneRef = useMemo(() => ({ current: scene }), [scene]);
-  const { mixer, actions, names } = useAnimations(animations, sceneRef);
-
-  const ballsRef = useRef([]);
-
-  const physics = useRef({
-    scrollPos: 0,
-    targetScroll: 0,
-    maxTime: 0,
-    scrollVelocity: 0,
-    spinVelocity: 0,
-    targetSpinVelocity: 0,
-    isDragging: false,
-    lastY: 0,
-    startY: 0,
-    dragSpeed: 0,
-
-    // Hand Physics
-    leftShoulder: null,
-    leftArm: null,
-    leftWrist: null,
-    leftArmBaseRotation: new THREE.Euler(),
-    smoothMotion: 0,
-    handOffset: 0,
-    handInteractionTriggered: false,
-    handInteractionProgress: 0,
-    handInteractionDirection: 0,
-  });
+function Model({ onSwipe, swapIndex }) {
+  const { scene, animations } = useGLTF('/model.glb')
+  const groupRef = useRef()
+  const sceneRef = useMemo(() => ({ current: scene }), [scene])
+  const { actions, mixer, names } = useAnimations(animations, sceneRef)
+  const ballRefs = useRef([])
+  const ballColors = useRef([
+    new THREE.Color('#FF6B6B'), // Coral Red - 0
+    new THREE.Color('#4ECDC4'), // Turquoise - 1
+    new THREE.Color('#FFD166'), // Sun Yellow - 2
+    new THREE.Color('#06D6A0'), // Emerald Green - 3
+    new THREE.Color('#118AB2')  // Ocean Blue - 4
+  ])
 
   useEffect(() => {
-    if (actions && names.length > 0) {
-      const action = actions[names[0]];
-      action.play();
-      action.paused = false;
-      physics.current.maxTime = action.getClip().duration;
-    }
-
-    // Reset References
-    ballsRef.current = [];
-    physics.current.leftShoulder = null;
-    physics.current.leftArm = null;
-    physics.current.leftWrist = null;
-    physics.current.leftArmBaseRotation = new THREE.Euler();
-    physics.current.smoothMotion = 0;
-    physics.current.handInteractionTriggered = false;
-
+    let ballIndex = 0
+    ballRefs.current = [] // Reset array
+    
     scene.traverse((child) => {
-      if (
-        child.isMesh &&
-        (child.name.toLowerCase().includes("ball") ||
-          child.name.toLowerCase().includes("circle") ||
-          child.name.toLowerCase().includes("sphere"))
-      ) {
-        ballsRef.current.push(child);
-      }
-
-      const name = child.name.toLowerCase();
-      const isLeft =
-        name.includes("left") ||
-        name.startsWith("l_") ||
-        name.includes("_l") ||
-        name.includes(".l");
-
-      if (isLeft) {
-        if (
-          name.includes("forearm") ||
-          name.includes("lowerarm") ||
-          (name.includes("arm") && !name.includes("up"))
-        ) {
-          physics.current.leftArm = child;
-          physics.current.leftArmBaseRotation.copy(child.rotation);
-        } else if (name.includes("wrist") || name.includes("hand")) {
-          physics.current.leftWrist = child;
+      // Look for balls/circles/spheres in the model
+      if (child.isMesh && (
+        child.name.toLowerCase().includes('circle') || 
+        child.name.toLowerCase().includes('ball') ||
+        child.name.toLowerCase().includes('sphere') ||
+        child.name.toLowerCase().includes('orb') ||
+        (child.geometry && child.geometry.type === 'SphereGeometry')
+      )) {
+        // Store reference
+        ballRefs.current.push(child)
+        
+        // Clone the material to avoid affecting other instances
+        if (child.material && ballIndex < ballColors.current.length) {
+          child.material = child.material.clone()
+          child.material.emissive = new THREE.Color(0x000000) // Reset emissive if any
+          
+          // Optional: Add some shine to the balls
+          if (child.material.type === 'MeshStandardMaterial' || 
+              child.material.type === 'MeshPhysicalMaterial') {
+            child.material.metalness = 0.3
+            child.material.roughness = 0.4
+          }
+          
+          console.log(`Found ball ${ballIndex}: ${child.name}`)
+          ballIndex++
         }
       }
-    });
-  }, [actions, names, scene]);
+    })
 
+    // Log how many balls were found
+    console.log(`Found ${ballRefs.current.length} balls`)
+
+  }, [scene])
+
+  // Update ball colors based on swap index
   useEffect(() => {
-    const ballSpinMultiplier = 0.005;
+    if (ballRefs.current.length > 0) {
+      ballRefs.current.forEach((ball, index) => {
+        if (ball.material) {
+          // Rotate colors based on swap index
+          // swapIndex 0: [0,1,2,3,4] -> Red, Turquoise, Yellow, Green, Blue
+          // swapIndex 1: [1,2,3,4,0] -> Turquoise, Yellow, Green, Blue, Red
+          // swapIndex 2: [2,3,4,0,1] -> Yellow, Green, Blue, Red, Turquoise
+          const colorIndex = (index + swapIndex) % ballColors.current.length
+          ball.material.color = ballColors.current[colorIndex]
+          ball.material.needsUpdate = true
+        }
+      })
+      console.log(`Updated ball colors for swap ${swapIndex}`)
+    }
+  }, [swapIndex])
 
-    const getClientY = (e) => {
-      return e.touches ? e.touches[0].clientY : e.clientY;
-    };
+  // Update animation mixer each frame
+  useFrame((state, delta) => {
+    if (mixer) {
+      mixer.update(delta)
+    }
+  })
 
-    const handleStart = (e) => {
-      physics.current.isDragging = true;
-      physics.current.handInteractionTriggered = false;
-      physics.current.handInteractionProgress = 0;
-      const currentY = getClientY(e);
-      physics.current.lastY = currentY;
-      physics.current.startY = currentY;
-
-      if (e.touches) e.preventDefault();
-    };
-
-    const handleMove = (e) => {
-      if (!physics.current.isDragging) return;
-
-      const currentY = getClientY(e);
-      const deltaY = currentY - physics.current.lastY;
-      physics.current.lastY = currentY;
-
-      // 1. Update Target Scroll (The destination)
-      const interactionScale = 1 / 250;
-      const movement = -deltaY * interactionScale;
-      physics.current.targetScroll += movement * physics.current.maxTime;
-
-      // 2. Hand Logic (Trigger once per drag)
-      if (!physics.current.handInteractionTriggered) {
-        const totalDisplacement = currentY - physics.current.startY;
-        if (Math.abs(totalDisplacement) > 20) {
-          physics.current.handInteractionTriggered = true;
-          physics.current.handInteractionDirection =
-            totalDisplacement < 0 ? 1 : -1;
-          physics.current.handInteractionProgress = 0;
+  // Function to play animation
+  const playAnimation = () => {
+    if (animations && animations.length > 0 && mixer) {
+      // Stop all currently playing animations
+      Object.values(actions).forEach(action => {
+        if (action) {
+          action.stop()
+        }
+      })
+      
+      // Try to play by name first
+      if (names && names.length > 0) {
+        const actionName = names[0]
+        if (actions[actionName]) {
+          const action = actions[actionName]
+          action.setLoop(THREE.LoopOnce, 1)
+          action.clampWhenFinished = true
+          action.reset().fadeIn(0.5).play()
+          return
         }
       }
-
-      // 3. Ball Spin Logic
-      physics.current.targetSpinVelocity = deltaY * ballSpinMultiplier * 0.5;
-
-      if (e.touches) e.preventDefault();
-    };
-
-    const handleEnd = () => {
-      physics.current.isDragging = false;
-    };
-
-    window.addEventListener("mousedown", handleStart);
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleEnd);
-    window.addEventListener("touchstart", handleStart, { passive: false });
-    window.addEventListener("touchmove", handleMove, { passive: false });
-    window.addEventListener("touchend", handleEnd);
-    window.addEventListener("touchcancel", handleEnd);
-
-    return () => {
-      window.removeEventListener("mousedown", handleStart);
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleEnd);
-      window.removeEventListener("touchstart", handleStart);
-      window.removeEventListener("touchmove", handleMove);
-      window.removeEventListener("touchend", handleEnd);
-      window.removeEventListener("touchcancel", handleEnd);
-    };
-  }, []);
-
-  useFrame((state, delta) => {
-    const p = physics.current;
-
-    // --- 1. SMOOTHER SCROLL INTERPOLATION ---
-    // Use damping formula: lerp(current, target, 1 - exp(-decay * delta))
-    // This makes the catch-up speed independent of frame rate
-    const dampFactor = 1 - Math.exp(-10 * delta);
-    p.scrollPos = THREE.MathUtils.lerp(p.scrollPos, p.targetScroll, dampFactor);
-
-    // Animation Mixer Update
-    if (mixer && p.maxTime > 0) {
-      const loopedTime = ((p.scrollPos % p.maxTime) + p.maxTime) % p.maxTime;
-      mixer.setTime(loopedTime);
+      
+      // Fallback: play first animation directly using mixer
+      const clip = animations[0]
+      const action = mixer.clipAction(clip, scene)
+      action.setLoop(THREE.LoopOnce, 1)
+      action.clampWhenFinished = true
+      action.reset().fadeIn(0.5).play()
     }
+  }
 
-    // --- 2. SMOOTHER HAND ANIMATION ---
-    if (p.handInteractionTriggered && p.handInteractionProgress < 1) {
-      p.handInteractionProgress += delta * 2.5;
-      const progress = Math.min(p.handInteractionProgress, 1);
-      p.handOffset = Math.sin(progress * Math.PI) * p.handInteractionDirection;
-    } else {
-      // Slower decay for smoother return to rest
-      p.handOffset = THREE.MathUtils.lerp(p.handOffset, 0, delta * 5);
+  // Play animation when onSwipe prop changes
+  useEffect(() => {
+    if (onSwipe && animations && mixer) {
+      playAnimation()
     }
-
-    // Smooth motion for bones
-    p.smoothMotion = THREE.MathUtils.lerp(
-      p.smoothMotion,
-      p.handOffset,
-      delta * 10
-    );
-    const motion = THREE.MathUtils.clamp(p.smoothMotion, -1, 1);
-
-    if (p.leftArm) {
-      const angleUp = 90 * (Math.PI / 180);
-      const angleDown = 20 * (Math.PI / 180);
-      const targetRotation = motion > 0 ? motion * angleUp : motion * angleDown;
-
-      p.leftArm.rotation.x = p.leftArmBaseRotation.x + targetRotation;
-      p.leftArm.position.y = motion > 0 ? motion * 0.2 : motion * 0.1;
-    }
-
-    if (p.leftWrist) {
-      p.leftWrist.position.y = motion > 0 ? motion * 0.1 : motion * 0.05;
-    }
-
-    // --- 3. SMOOTHER BALL SPIN ---
-    // Interpolate spin velocity towards target, then decay target
-    p.spinVelocity = THREE.MathUtils.lerp(
-      p.spinVelocity,
-      p.targetSpinVelocity,
-      delta * 10
-    );
-    p.targetSpinVelocity = THREE.MathUtils.lerp(
-      p.targetSpinVelocity,
-      0,
-      delta * 2
-    ); // Friction
-
-    if (ballsRef.current.length > 0) {
-      ballsRef.current.forEach((ball) => {
-        ball.rotation.x += p.spinVelocity;
-      });
-    }
-  });
+  }, [onSwipe, animations, mixer])
 
   return (
-    <Center>
+    <group ref={groupRef}>
       <primitive object={scene} />
-    </Center>
-  );
+    </group>
+  )
 }
 
 function App() {
+  const [swipeTrigger, setSwipeTrigger] = useState(0)
+  const [swapIndex, setSwapIndex] = useState(0)
+  const [swapCount, setSwapCount] = useState(0)
+  const touchStartY = useRef(0)
+  const touchStartX = useRef(0)
+  const containerRef = useRef()
+  const [showInstructions, setShowInstructions] = useState(true)
+
+  // Handle touch start
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0]
+    touchStartY.current = touch.clientY
+    touchStartX.current = touch.clientX
+  }
+
+  // Handle touch end - detect swipe
+  const handleTouchEnd = (e) => {
+    if (!touchStartY.current) return
+
+    const touch = e.changedTouches[0]
+    const touchEndY = touch.clientY
+    const touchEndX = touch.clientX
+    
+    const deltaY = touchEndY - touchStartY.current
+    const deltaX = touchEndX - touchStartX.current
+    
+    // Check if it's a vertical swipe (more vertical than horizontal)
+    if (Math.abs(deltaY) > Math.abs(deltaX)) {
+      // Minimum swipe distance (in pixels)
+      const minSwipeDistance = 50
+      
+      if (Math.abs(deltaY) > minSwipeDistance) {
+        // Trigger animation on any vertical swipe (up or down)
+        setSwipeTrigger(prev => prev + 1)
+        setSwapCount(prev => prev + 1)
+        // Only change colors after the first swap
+        setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
+        setShowInstructions(false)
+      }
+    }
+    
+    // Reset touch start values
+    touchStartY.current = 0
+    touchStartX.current = 0
+  }
+
+  // Handle wheel event (for mouse wheel/trackpad)
+  const handleWheel = (e) => {
+    // Prevent page scrolling
+    e.preventDefault()
+    
+    // Minimum wheel delta to trigger animation
+    const minWheelDelta = 50
+    
+    if (Math.abs(e.deltaY) > minWheelDelta) {
+      setSwipeTrigger(prev => prev + 1)
+      setSwapCount(prev => prev + 1)
+      // Only change colors after the first swap
+      setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
+      setShowInstructions(false)
+    }
+  }
+
+  // Handle mouse down/up for desktop drag simulation
+  const mouseStartY = useRef(0)
+  const isMouseDown = useRef(false)
+
+  const handleMouseDown = (e) => {
+    isMouseDown.current = true
+    mouseStartY.current = e.clientY
+  }
+
+  const handleMouseUp = (e) => {
+    if (!isMouseDown.current) return
+    
+    const mouseEndY = e.clientY
+    const deltaY = mouseEndY - mouseStartY.current
+    
+    // Minimum drag distance (in pixels)
+    const minDragDistance = 100
+    
+    if (Math.abs(deltaY) > minDragDistance) {
+      setSwipeTrigger(prev => prev + 1)
+      setSwapCount(prev => prev + 1)
+      // Only change colors after the first swap
+      setSwapIndex(prev => swapCount > 0 ? (prev + 1) % 5 : prev)
+      setShowInstructions(false)
+    }
+    
+    isMouseDown.current = false
+  }
+
+  const handleMouseMove = (e) => {
+    if (!isMouseDown.current) return
+  }
+
+  // Handle mouse leave
+  const handleMouseLeave = () => {
+    isMouseDown.current = false
+  }
+
   return (
-    <div style={{ height: "100vh", width: "100vw", background: "#f5f5f5" }}>
-      <Canvas camera={{ position: [2, 0, 11], fov: 45 }}>
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow />
-        <directionalLight position={[-5, 0, 0]} intensity={0.5} />
-        <Model />
-        <OrbitControls
-          enableZoom={false}
-          enablePan={false}
-          enableRotate={false}
+    <div 
+      ref={containerRef}
+      style={{ 
+        height: '100vh',
+        width: '100vw',
+        touchAction: 'none',
+        overflow: 'hidden',
+        position: 'relative'
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      <Canvas camera={{ position: [2, 0, 5], fov: 75 }}>
+        <ambientLight intensity={0.6} />
+        <directionalLight 
+          position={[10, 10, 5]} 
+          intensity={1} 
+          castShadow
         />
-      </Canvas>
+        <pointLight position={[10, 10, 10]} intensity={0.5} />
+        
+        <Model onSwipe={swipeTrigger} swapIndex={swapIndex} />
+        <OrbitControls 
+          enableRotate={false} 
+          enablePan={false} 
+          enableZoom={true}
+          maxDistance={10}
+          minDistance={3}
+        />
+      </Canvas>     
     </div>
   );
 }
 
-export default App;
+export default App
