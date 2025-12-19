@@ -1,4 +1,4 @@
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, useGLTF, useAnimations } from '@react-three/drei'
 import { useRef, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
@@ -8,6 +8,69 @@ function Model({ onSwipe }) {
   const groupRef = useRef()
   const sceneRef = useMemo(() => ({ current: scene }), [scene])
   const { actions, mixer, names } = useAnimations(animations, sceneRef)
+  const ballRefs = useRef([])
+
+  useEffect(() => {
+    // Colors for the balls - 5 distinct colors
+    const ballColors = [
+      new THREE.Color('#FF6B6B'), // Coral Red
+      new THREE.Color('#4ECDC4'), // Turquoise
+      new THREE.Color('#FFD166'), // Sun Yellow
+      new THREE.Color('#06D6A0'), // Emerald Green
+      new THREE.Color('#118AB2')  // Ocean Blue
+    ]
+
+    let ballIndex = 0
+    ballRefs.current = [] // Reset array
+    
+    scene.traverse((child) => {
+      // Look for balls/circles/spheres in the model
+      if (child.isMesh && (
+        child.name.toLowerCase().includes('circle') || 
+        child.name.toLowerCase().includes('ball') ||
+        child.name.toLowerCase().includes('sphere') ||
+        child.name.toLowerCase().includes('orb') ||
+        (child.geometry && child.geometry.type === 'SphereGeometry')
+      )) {
+        // Store reference
+        ballRefs.current.push(child)
+        
+        // Assign color if we haven't used all colors yet
+        if (ballIndex < ballColors.length) {
+          // Clone the material to avoid affecting other instances
+          if (child.material) {
+            child.material = child.material.clone()
+            child.material.color = ballColors[ballIndex]
+            child.material.emissive = new THREE.Color(0x000000) // Reset emissive if any
+            child.material.needsUpdate = true
+            
+            // Optional: Add some shine to the balls
+            if (child.material.type === 'MeshStandardMaterial' || 
+                child.material.type === 'MeshPhysicalMaterial') {
+              child.material.metalness = 0.3
+              child.material.roughness = 0.4
+            }
+            
+            console.log(`Assigned color ${ballIndex + 1} to ball: ${child.name}`)
+            ballIndex++
+          }
+        } else {
+          // For balls beyond 5, assign random colors or repeat the palette
+          if (child.material) {
+            child.material = child.material.clone()
+            const repeatIndex = ballIndex % ballColors.length
+            child.material.color = ballColors[repeatIndex]
+            child.material.needsUpdate = true
+            ballIndex++
+          }
+        }
+      }
+    })
+
+    // Log how many balls were found and colored
+    console.log(`Found and colored ${ballRefs.current.length} balls`)
+
+  }, [scene])
 
   // Update animation mixer each frame
   useFrame((state, delta) => {
@@ -66,6 +129,7 @@ function App() {
   const touchStartY = useRef(0)
   const touchStartX = useRef(0)
   const containerRef = useRef()
+  const [showInstructions, setShowInstructions] = useState(true)
 
   // Handle touch start
   const handleTouchStart = (e) => {
@@ -93,6 +157,7 @@ function App() {
       if (Math.abs(deltaY) > minSwipeDistance) {
         // Trigger animation on any vertical swipe (up or down)
         setSwipeTrigger(prev => prev + 1)
+        setShowInstructions(false)
       }
     }
     
@@ -111,6 +176,7 @@ function App() {
     
     if (Math.abs(e.deltaY) > minWheelDelta) {
       setSwipeTrigger(prev => prev + 1)
+      setShowInstructions(false)
     }
   }
 
@@ -134,6 +200,7 @@ function App() {
     
     if (Math.abs(deltaY) > minDragDistance) {
       setSwipeTrigger(prev => prev + 1)
+      setShowInstructions(false)
     }
     
     isMouseDown.current = false
@@ -156,7 +223,10 @@ function App() {
       ref={containerRef}
       style={{ 
         height: '100vh',
-        touchAction: 'none' // Prevent browser touch actions
+        width: '100vw',
+        touchAction: 'none',
+        overflow: 'hidden',
+        position: 'relative'
       }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -166,28 +236,24 @@ function App() {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      <Canvas camera={{ position: [0, 0, 5], fov: 75 }}>
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 5]} intensity={1} />
+      <Canvas camera={{ position: [2, 0, 5], fov: 75 }}>
+        <ambientLight intensity={0.6} />
+        <directionalLight 
+          position={[10, 10, 5]} 
+          intensity={1} 
+          castShadow
+        />
+        <pointLight position={[10, 10, 10]} intensity={0.5} />
+        
         <Model onSwipe={swipeTrigger} />
-        <OrbitControls enableRotate={false} enablePan={false} enableZoom={true} />
-      </Canvas>
-      
-      {/* Optional: Add swipe instructions */}
-      <div style={{
-        position: 'absolute',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        color: 'white',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: '10px 20px',
-        borderRadius: '20px',
-        fontSize: '14px',
-        pointerEvents: 'none'
-      }}>
-        Swipe up or down to animate
-      </div>
+        <OrbitControls 
+          enableRotate={false} 
+          enablePan={false} 
+          enableZoom={true}
+          maxDistance={10}
+          minDistance={3}
+        />
+      </Canvas>     
     </div>
   )
 }
